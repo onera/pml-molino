@@ -1,0 +1,50 @@
+[project]
+name = "molino"
+description = "A prototype Graphical User Interface to explore PML analysis results and trace data."
+dynamic = ["version", "readme", "dependencies", "requires-python"]
+license = "LGPL-3.0-or-later"
+authors = [
+    {name = "Benjamin Lesage", email= "benjamin.lesage@onera.fr"},
+]
+keywords = []
+# https://pypi.org/classifiers/
+classifiers = []
+maintainers = []
+
+[tool.poetry]
+name = "molino"
+description = "A prototype Graphical User Interface to explore PML analysis results and trace data."
+version = "0.5a1"
+readme = "README.md"
+authors = [
+    "Benjamin Lesage <benjamin.lesage@onera.fr>",
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+Flask = "3.0.3"
+peewee = "3.17.6"
+tqdm = "4.66.5"
+
+jupyterlab = "4.3.5"
+ipywidgets = "8.1.5"
+ipyvuetify = "1.11.1"
+voila = "^0.5.8"
+black = "^25.1.0"
+numpy = "^2.3.1"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+black = "25.1.0"
+mypy = "1.15.0"
+ruff = "0.5.5"
+
+[project.scripts]
+molino_dashboard = 'molino.cli_dashboard:main'
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
