@@ -1,6 +1,8 @@
 # PML Molino
 
-A prototype Graphical User Interface to explore PML analysis results and trace data. 
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/onera/pml-molino/HEAD?urlpath=%2Fdoc%2Ftree%2Fsrc%2Fmolino%2Fnotebooks%2Fimporter.ipynb)
+
+A prototype Graphical User Interface to explore PML analysis results and trace data.
 
 ## Setup
 
