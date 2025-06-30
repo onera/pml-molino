@@ -128,9 +128,8 @@
         </v-card-text>
       </v-card>
 
-      <v-toolbar color="primary">
         <v-dialog v-model="hist_dialog" max-width="800px">
-          <v-card>
+          <v-card :loading="hist_loading">
             <v-card-title class="text-h2">Observations for {{ hist_item.tr }}</v-card-title>
             <v-card-subtitle class="text-h3">In the context of {{hist_item.mtr_name}}</v-card-subtitle>
             <!-- Timing histograms in isolation and contention -->
@@ -178,7 +177,6 @@
             <!--            </v-card-actions>-->
           </v-card>
         </v-dialog>
-      </v-toolbar>
     </template>
 
     <!-- Multi-transaction name display -->
