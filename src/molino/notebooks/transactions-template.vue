@@ -3,6 +3,7 @@
       dense
       :headers="headers"
       :items="transactions"
+      :penalty_mode.sync="penalty_mode"
       :penalty_threshold.sync="penalty_threshold"
       :options.sync="options"
       :filters.sync="filters"
@@ -115,26 +116,19 @@
             </v-slider>
 
             <!-- Configure penalty mode-->
-            <v-radio-group
+            <v-select
                 v-model="penalty_mode"
-                row
-                mandatory
-            >
-              <v-radio
-                  label="Timing (lower is better)"
-                  value="-1"
-              ></v-radio>
-              <v-radio
-                  label="Bandwidth (higher is better)"
-                  value="1"
-              ></v-radio>
-            </v-radio-group>
+                :items="[{name: 'Timing (Lower is better)', value: -1}, {name: 'Bandwidth (Higher is better)', value: 1}]"
+                label="Penalty mode"
+                item-text="name"
+                item-value="value"
+            />
 
           </v-form>
         </v-card-text>
       </v-card>
 
-      <v-toolbar>
+      <v-toolbar color="primary">
         <v-dialog v-model="hist_dialog" max-width="800px">
           <v-card>
             <v-card-title class="text-h2">Observations for {{ hist_item.tr }}</v-card-title>
