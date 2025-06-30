@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> This is a highly experimental tool, historically developed for internal use. It shall be considered as early alpha.
+
 # PML Molino
 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/onera/pml-molino/HEAD?urlpath=%2Fdoc%2Ftree%2Fsrc%2Fmolino%2Fnotebooks%2Fimporter.ipynb)
