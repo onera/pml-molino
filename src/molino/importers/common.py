@@ -156,6 +156,7 @@ def create_or_fetch_multitransactions(
     create_missing: bool = True,
     batch: int = 2048,
     watermarks: dict[tuple[str, str], tuple[float, float]] | None = None,
+    parse_transaction_name: Callable[[str,], tuple[str, str, bool, bool, str | None]] = None,
 ) -> None:
     """Create or retrieve the entries for the named Multi-transactions."""
     if watermarks is None:
@@ -180,7 +181,7 @@ def create_or_fetch_multitransactions(
             tr_names,
             create_missing=create_missing,
             watermarks=watermarks,
-            parse_transaction_name=None,
+            parse_transaction_name=parse_transaction_name,
         )
 
     # Create missing multi-transaction and contexts
