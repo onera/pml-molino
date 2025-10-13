@@ -39,7 +39,7 @@ def create_or_fetch_transactions(
     *,
     create_missing: bool = True,
     watermarks: dict[tuple[str, str], tuple[float, float]] | None = None,
-    parse_transaction_name: Callable[[str,], tuple[str, str, bool, bool, str | None]] = None,
+    parse_transaction_name: Callable[[str,], list[tuple[str, str, bool, bool, str | None]]] = None,
 ) -> dict[str, Transaction]:
     """Get or create a batch of transaction atoms by names.
 
@@ -156,7 +156,7 @@ def create_or_fetch_multitransactions(
     create_missing: bool = True,
     batch: int = 2048,
     watermarks: dict[tuple[str, str], tuple[float, float]] | None = None,
-    parse_transaction_name: Callable[[str,], tuple[str, str, bool, bool, str | None]] = None,
+    parse_transaction_name: Callable[[str,], list[tuple[str, str, bool, bool, str | None]]] = None,
 ) -> None:
     """Create or retrieve the entries for the named Multi-transactions."""
     if watermarks is None:
