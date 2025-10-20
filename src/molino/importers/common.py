@@ -3,14 +3,15 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from itertools import islice
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Protocol, Iterator
 
 from peewee import EXCLUDED, fn, chunked
 from tqdm import tqdm
 
+from molino import Resource
 # FIXME Common importer API should not rely on the specific ALF importer
-# FIXME Common importer API shoulduse the existing create_transactions and create_multitransactions metods
-from molino.importers.alf import _create_or_fetch_resources, _create_transactions, _create_atoms, \
+# FIXME Common importer API should use the existing create_transactions and create_multitransactions methods
+from molino.importers.alf import _create_transactions, _create_atoms, \
     _create_multitransactions, _create_contexts, _create_observations
 from molino.transactions import (
     AtomicTransaction,
@@ -349,7 +350,7 @@ def register_observations(
                         resources[atom.target] = roles["Target"]
             db_resources = {
                 r.name: r
-                for r in _create_or_fetch_resources(
+                for r in create_or_fetch_resources(
                     (name, role) for name, role in resources.items()
                 )
             }
@@ -434,3 +435,26 @@ def register_observations(
                     ),
                 )
             )
+
+
+def create_or_fetch_resources(
+        resources: Iterator[tuple[str, str]],
+        chunk_size: int = 1024,
+) -> Iterator[Resource]:
+    """Create or fetch existing resources from the database.
+
+    Creation should fail if the resource already exists with a different role.
+    """
+    for batch in chunked(resources, chunk_size):
+        q = Resource.insert_many(
+            batch,
+            fields=[Resource.name, Resource.role],
+        # FIXME Find a way to fail on existing resource with a different role
+        # - ).on_conflict(
+        # - action="abort",
+        # - conflict_target=[Resource.name],
+        # - where=(Resource.role != EXCLUDED.role),
+        ).on_conflict_replace().returning(
+            Resource,
+        )
+        yield from q.execute()

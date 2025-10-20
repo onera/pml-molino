@@ -8,6 +8,7 @@ from pathlib import Path
 
 from peewee import chunked
 
+from molino.importers.common import create_or_fetch_resources
 from molino.transactions import (
     AtomicTransaction,
     Location,
@@ -203,29 +204,6 @@ def parse_alf_observations(alf_path: Path) -> Iterator[AlfObservation]:
         yield from observations
 
 
-def _create_or_fetch_resources(
-        resources: Iterator[tuple[str, str]],
-        chunk_size: int = 1024,
-) -> Iterator[Resource]:
-    """Create or fetch existing resources from the database.
-
-    Creation should fail if the resource already exists with a different role.
-    """
-    for batch in chunked(resources, chunk_size):
-        q = Resource.insert_many(
-            batch,
-            fields=[Resource.name, Resource.role],
-        # FIXME Find a way to fail on existing resource with a different role
-        # - ).on_conflict(
-        # - action="abort",
-        # - conflict_target=[Resource.name],
-        # - where=(Resource.role != EXCLUDED.role),
-        ).on_conflict_replace().returning(
-            Resource,
-        )
-        yield from q.execute()
-
-
 def _create_transactions(
         names: Iterable[str],
         chunk_size: int = 1024,
@@ -337,7 +315,7 @@ def load_observations(
                         resources[transaction.target] = roles["Target"]
                 db_resources = {
                     r.name: r
-                    for r in _create_or_fetch_resources(
+                    for r in create_or_fetch_resources(
                         (name, role) for name, role in resources.items()
                     )
                 }
