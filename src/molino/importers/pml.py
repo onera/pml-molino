@@ -40,7 +40,7 @@ def load_pml_classifications(
                         sorted(a.strip() for a in transaction_name.split("||")),
                     )
                     names.add(transaction_name)
-                create_or_fetch_multitransactions(name, create_missing=create_missing)
+                create_or_fetch_multitransactions(names, create_missing=create_missing)
                 mtr_ids: set[int] = {
                     i
                     for i, n in MultiTransaction.select(
