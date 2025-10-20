@@ -3,16 +3,13 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from itertools import islice
 from pathlib import Path
-from typing import Any, Callable, Protocol, Iterator
+from typing import Any, Callable, Protocol, Iterator, Iterable
 
 from peewee import EXCLUDED, fn, chunked
 from tqdm import tqdm
 
 from molino import Resource
-# FIXME Common importer API should not rely on the specific ALF importer
-# FIXME Common importer API should use the existing create_transactions and create_multitransactions methods
-from molino.importers.alf import _create_transactions, _create_atoms, \
-    _create_multitransactions, _create_contexts, _create_observations
+# FIXME Common importer API should use the existing create_or_fetch_transactions and create_or_fetch_multitransactions methods
 from molino.transactions import (
     AtomicTransaction,
     MultiToTransactions,
@@ -358,7 +355,7 @@ def register_observations(
             transactions: set[str] = set()
             for observation in obs_batch:
                 transactions.update(t.name for t in observation.transactions)
-            db_transactions = {t.name: t for t in _create_transactions(transactions)}
+            db_transactions = {t.name: t for t in create_transactions(transactions)}
             # Create transaction atoms for newly created transactions
             atoms: set[
                 tuple[Transaction, Resource, Resource, bool, bool, str | None]
@@ -378,7 +375,7 @@ def register_observations(
                                     atom.service,
                                 )
                             )
-            db_atoms = list(_create_atoms(atoms))
+            db_atoms = list(create_atoms(atoms))
             # Fetch previously existing transactions
             for t in transactions:
                 if t not in db_transactions:
@@ -386,7 +383,7 @@ def register_observations(
             # Create new multi-transactions
             mtrs: set[str] = {i.mtr for i in obs_batch}
             db_mtrs: dict[str, MultiTransaction] = {
-                m.name: m for m in _create_multitransactions(iter(mtrs))
+                m.name: m for m in create_multitransactions(iter(mtrs))
             }
             # Collect existing multi-transactions
             for m in mtrs:
@@ -404,7 +401,7 @@ def register_observations(
                 )
             db_contexts: dict[tuple[str, str], MultiToTransactions] = {
                 (c.multi_transaction.name, c.transaction.name): c
-                for c in _create_contexts(iter(contexts))
+                for c in create_contexts(iter(contexts))
             }
             # Collect existing contexts
             for observation in obs_batch:
@@ -422,7 +419,7 @@ def register_observations(
                         )
             # Record observations
             db_obs: list[Observation] = list(
-                _create_observations(
+                create_observations(
                     (
                         (
                             db_mtrs[observation.mtr],
@@ -457,4 +454,93 @@ def create_or_fetch_resources(
         ).on_conflict_replace().returning(
             Resource,
         )
+        yield from q.execute()
+
+
+def create_atoms(
+        atoms: Iterable[tuple[Transaction, Resource, Resource, bool, bool, str | None]],
+        chunk_size: int = 1024,
+) -> Iterator[Transaction]:
+    """Create a batch of atoms.
+
+    Note that there is no way to detect conflicts upon atom creations. Only
+    atoms for newly created transactions should be created.
+    """
+    for batch in chunked(atoms, chunk_size):
+        q = (
+            AtomicTransaction.insert_many(
+                batch,
+                fields=[
+                    AtomicTransaction.transaction,
+                    AtomicTransaction.initiator,
+                    AtomicTransaction.target,
+                    AtomicTransaction.is_load,
+                    AtomicTransaction.is_store,
+                    AtomicTransaction.page_access,
+                ],
+            ).returning(AtomicTransaction)
+        )
+        yield from q.execute()
+
+
+def create_transactions(
+        names: Iterable[str],
+        chunk_size: int = 1024,
+) -> Iterator[Transaction]:
+    """Create a batch of transactions by names."""
+    for batch in chunked(names, chunk_size):
+        q = Transaction.insert_many(
+            ((n, None, None) for n in batch),
+            fields=[Transaction.name, Transaction.lwm, Transaction.hwm],
+        ).on_conflict_ignore().returning(Transaction)
+        yield from q.execute()
+
+
+def create_multitransactions(
+        names: Iterator[str],
+        chunk_size: int = 1024,
+) -> Iterator[MultiTransaction]:
+    """Create existing multi-transactions from the database."""
+    for batch in chunked(names, chunk_size):
+        q = MultiTransaction.insert_many(
+            ((n,) for n in batch),
+            fields=[MultiTransaction.name],
+        ).on_conflict_ignore().returning(MultiTransaction)
+        yield from q.execute()
+
+
+def create_contexts(
+        mttr: Iterator[tuple[MultiTransaction, Transaction, int]],
+        chunk_size: int = 1024,
+) -> Iterator[MultiToTransactions]:
+    """Create multi-to-transactions in the database."""
+    for batch in chunked(mttr, chunk_size):
+        q = MultiToTransactions.insert_many(
+            ((m, t, t.name, a) for (m, t, a) in batch),
+            fields=[
+                MultiToTransactions.multi_transaction,
+                MultiToTransactions.transaction,
+                MultiToTransactions.tr_name,
+                MultiToTransactions.arity,
+            ],
+        ).on_conflict_ignore().returning(MultiToTransactions)
+        yield from q.execute()
+
+
+def create_observations(
+        observations: Iterator[tuple[MultiTransaction, Transaction, float, Location, int]],
+        chunk_size: int = 1024,
+) -> Iterator[Observation]:
+    """Create a batch of observations in the database."""
+    for batch in chunked(observations, chunk_size):
+        q = Observation.insert_many(
+            batch,
+            fields=[
+                Observation.multi_transaction,
+                Observation.transaction,
+                Observation.value,
+                Observation.location,
+                Observation.location_line,
+            ],
+        ).returning(Observation)
         yield from q.execute()
