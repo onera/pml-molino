@@ -3,18 +3,22 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from itertools import islice
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
-from peewee import EXCLUDED, fn
+from peewee import EXCLUDED, fn, chunked
 from tqdm import tqdm
 
+# FIXME Common importer API should not rely on the specific ALF importer
+# FIXME Common importer API shoulduse the existing create_transactions and create_multitransactions metods
+from molino.importers.alf import _create_or_fetch_resources, _create_transactions, _create_atoms, \
+    _create_multitransactions, _create_contexts, _create_observations
 from molino.transactions import (
     AtomicTransaction,
     MultiToTransactions,
     MultiTransaction,
     Resource,
     Transaction,
-    transactions_db,
+    transactions_db, Location, Observation,
 )
 
 
@@ -292,4 +296,141 @@ def create_or_fetch_multitransactions(
                 mtt_entries,
                 [MultiToTransactions.lwm, MultiToTransactions.hwm],
                 batch_size=2048,
+            )
+
+
+class AtomEntry(Protocol):
+    initiator: str
+    target: str
+
+    service: str
+    is_load: bool
+    is_store: bool
+
+
+class TransactionEntry(Protocol):
+    name: str
+    atoms: list[AtomEntry]
+
+
+class ObservationEntry(Protocol):
+    """Observation information for data entry."""
+    mtr: str
+    victim: str
+    transactions: list[TransactionEntry]
+    value: float
+
+    location: Path
+    location_line: int
+
+
+def register_observations(
+    observations: Iterator[ObservationEntry],
+    chunk_size: int = 10000,
+) -> None:
+    """Load observations from ALF trace into database."""
+    with transactions_db.atomic():
+        for batch in chunked(observations, chunk_size):
+            obs_batch: list[ObservationEntry] = list(batch)
+            # Collect and create locations
+            locations: list[Location] = []
+            for observation in obs_batch:
+                location: Location = Location.get_or_create(url=str(observation.location))[0]
+                locations.append(location)
+            #  Collect and create resources
+            resources: dict[str, str] = {}
+            db_resources: dict[str, Resource]
+            roles = Resource.roles()
+            for observation in obs_batch:
+                for transaction in observation.transactions:
+                    for atom in transaction.atoms:
+                        # FIXME Fail if resources already exists with a different role
+                        resources[atom.initiator] = roles["Initiator"]
+                        resources[atom.target] = roles["Target"]
+            db_resources = {
+                r.name: r
+                for r in _create_or_fetch_resources(
+                    (name, role) for name, role in resources.items()
+                )
+            }
+            # Create missing transactions
+            transactions: set[str] = set()
+            for observation in obs_batch:
+                transactions.update(t.name for t in observation.transactions)
+            db_transactions = {t.name: t for t in _create_transactions(transactions)}
+            # Create transaction atoms for newly created transactions
+            atoms: set[
+                tuple[Transaction, Resource, Resource, bool, bool, str | None]
+            ] = set()
+            for observation in obs_batch:
+                for transaction in observation.transactions:
+                    db_transaction = db_transactions.get(transaction.name)
+                    if db_transaction is not None:
+                        for atom in transaction.atoms:
+                            atoms.add(
+                                (
+                                    db_transactions[transaction.name],
+                                    db_resources[atom.initiator],
+                                    db_resources[atom.target],
+                                    atom.is_load,
+                                    atom.is_store,
+                                    atom.service,
+                                )
+                            )
+            db_atoms = list(_create_atoms(atoms))
+            # Fetch previously existing transactions
+            for t in transactions:
+                if t not in db_transactions:
+                    db_transactions[t] = Transaction.get(Transaction.name == t)
+            # Create new multi-transactions
+            mtrs: set[str] = {i.mtr for i in obs_batch}
+            db_mtrs: dict[str, MultiTransaction] = {
+                m.name: m for m in _create_multitransactions(iter(mtrs))
+            }
+            # Collect existing multi-transactions
+            for m in mtrs:
+                if m not in db_mtrs:
+                    db_mtrs[m] = MultiTransaction.get(MultiTransaction.name == m)
+            # Create Contexts
+            contexts: set[tuple[MultiTransaction, Transaction, int]] = set()
+            for observation in obs_batch:
+                contexts.add(
+                    (
+                        db_mtrs[observation.mtr],
+                        db_transactions[observation.victim],
+                        len(observation.transactions),
+                    )
+                )
+            db_contexts: dict[tuple[str, str], MultiToTransactions] = {
+                (c.multi_transaction.name, c.transaction.name): c
+                for c in _create_contexts(iter(contexts))
+            }
+            # Collect existing contexts
+            for observation in obs_batch:
+                k = (observation.mtr, observation.victim)
+                if k not in db_contexts:
+                    db_contexts[k] = MultiToTransactions.get(
+                        (
+                                MultiToTransactions.multi_transaction
+                                == db_mtrs[observation.mtr]
+                        )
+                        & (
+                                MultiToTransactions.transaction
+                                == db_transactions[observation.victim]
+                        ),
+                        )
+            # Record observations
+            db_obs: list[Observation] = list(
+                _create_observations(
+                    (
+                        (
+                            db_mtrs[observation.mtr],
+                            db_transactions[observation.victim],
+                            float(observation.value),
+                            locations[i],
+                            observation.location_line,
+                        )
+                        for i, observation in enumerate(obs_batch)
+                    ),
+                )
             )
