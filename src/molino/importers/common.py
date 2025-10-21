@@ -325,6 +325,8 @@ class ObservationEntry(Protocol):
 def register_observations(
     observations: Iterator[ObservationEntry],
     chunk_size: int = 10000,
+    *,
+    progress=None,
 ) -> None:
     """Load observations from ALF trace into database."""
     with transactions_db.atomic():
@@ -432,6 +434,8 @@ def register_observations(
                     ),
                 )
             )
+            if progress is not None:
+                progress.update(len(db_obs))
 
 
 def create_or_fetch_resources(
