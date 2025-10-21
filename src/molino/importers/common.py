@@ -53,10 +53,7 @@ def create_or_fetch_transactions(
     - if the atomic transaction is a store
     - the page hit/miss status of the atomic transaction (resp. "Ph"/"Pm")
     """
-    # Access fields: initiator, target, is load, is store, page access
-
     names = list(names)
-
     if watermarks is None:
         watermarks = {}
     else:
@@ -65,23 +62,14 @@ def create_or_fetch_transactions(
     # Identify existing transaction
     db_atoms = {n.name for n in Transaction if n.name in names}
 
-    # Create missing transactions, and update watermarks
+    # Create missing transactions, or update existing watermarks
     pending_transactions = {}
     for n in names:
-        if n in db_atoms or create_missing:
+        if n in db_atoms:
+            pending_transactions[n] = []
+        elif create_missing:
             pending_transactions[n] = parse_transaction_name(n)
 
-    # Create all required resources
-    resources = set()
-    for accesses in pending_transactions.values():
-        for a in accesses:
-            resources.add((a[0], "I"))
-            resources.add((a[1], "E"))
-    db_resources = {}
-    for r, t in resources:
-        db_resources[r] = Resource.get_or_create(name=r, defaults={"role": t})[0]
-
-    # Create all required transactions
     created_transactions = {
         n: (
             n,
@@ -117,6 +105,16 @@ def create_or_fetch_transactions(
             )
         ),
     ).execute()
+
+    # Create all required resources
+    resources = set()
+    for accesses in pending_transactions.values():
+        for a in accesses:
+            resources.add((a[0], "I"))
+            resources.add((a[1], "E"))
+    db_resources = {}
+    for r, t in resources:
+        db_resources[r] = Resource.get_or_create(name=r, defaults={"role": t})[0]
 
     # Create all required atomic transactions
     created_atoms = []
